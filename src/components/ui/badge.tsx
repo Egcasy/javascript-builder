@@ -12,12 +12,21 @@ const badgeVariants = cva(
         secondary: "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
         destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
         outline: "text-foreground",
+        // Premium variants
+        hot: "border-transparent bg-gradient-primary text-primary-foreground animate-glow-pulse",
+        vip: "border-transparent bg-gradient-accent text-accent-foreground",
+        success: "border-transparent bg-success/20 text-success border-success/30",
+        warning: "border-transparent bg-warning/20 text-warning border-warning/30",
+        soldOut: "border-transparent bg-destructive/20 text-destructive border-destructive/30",
+        limited: "border-transparent bg-warning/20 text-warning border-warning/30",
+        earlyBird: "border-transparent bg-accent/20 text-accent border-accent/30",
+        featured: "border-primary/30 bg-primary/10 text-primary",
       },
     },
     defaultVariants: {
       variant: "default",
     },
-  },
+  }
 );
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}

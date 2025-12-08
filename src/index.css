@@ -2,95 +2,98 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
+@import "@fontsource/outfit/400.css";
+@import "@fontsource/outfit/500.css";
+@import "@fontsource/outfit/600.css";
+@import "@fontsource/outfit/700.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+
+/* 
+  TixHub - Premium Ticket Marketplace Design System
+  Dark, sophisticated theme with electric energy accents
 */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Core palette - Deep dark blues */
+    --background: 222 47% 5%;
+    --foreground: 210 40% 98%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    /* Cards & surfaces */
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+    --card-elevated: 222 47% 11%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary - Electric coral/orange for energy */
+    --primary: 16 100% 60%;
+    --primary-foreground: 222 47% 5%;
+    --primary-glow: 16 100% 70%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary - Muted slate */
+    --secondary: 222 30% 15%;
+    --secondary-foreground: 210 20% 80%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted tones */
+    --muted: 222 30% 12%;
+    --muted-foreground: 215 20% 55%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent - Vibrant purple for highlights */
+    --accent: 270 80% 60%;
+    --accent-foreground: 210 40% 98%;
+    --accent-glow: 270 80% 70%;
 
-    --destructive: 0 84.2% 60.2%;
+    /* Status colors */
+    --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
+    --success: 142 76% 45%;
+    --success-foreground: 210 40% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 222 47% 5%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Borders & inputs */
+    --border: 222 30% 18%;
+    --input: 222 30% 12%;
+    --ring: 16 100% 60%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 98%;
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(16, 100%, 60%) 0%, hsl(340, 100%, 55%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(270, 80%, 60%) 0%, hsl(220, 100%, 60%) 100%);
+    --gradient-dark: linear-gradient(180deg, hsl(222, 47%, 8%) 0%, hsl(222, 47%, 3%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(222, 47%, 10%) 0%, hsl(222, 47%, 6%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(222, 47%, 8%) 0%, hsl(240, 50%, 5%) 50%, hsl(222, 47%, 8%) 100%);
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    /* Shadows */
+    --shadow-glow: 0 0 40px hsl(16 100% 60% / 0.2);
+    --shadow-card: 0 4px 24px hsl(0 0% 0% / 0.4);
+    --shadow-elevated: 0 8px 40px hsl(0 0% 0% / 0.5);
 
-    --sidebar-primary: 240 5.9% 10%;
+    /* Sidebar */
+    --sidebar-background: 222 47% 6%;
+    --sidebar-foreground: 210 20% 80%;
+    --sidebar-primary: 16 100% 60%;
+    --sidebar-primary-foreground: 222 47% 5%;
+    --sidebar-accent: 222 30% 12%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 222 30% 15%;
+    --sidebar-ring: 16 100% 60%;
 
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Chart colors */
+    --chart-1: 16 100% 60%;
+    --chart-2: 270 80% 60%;
+    --chart-3: 142 76% 45%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 220 100% 60%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Same as root - dark by default */
   }
 }
 
@@ -99,7 +102,150 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-family: "Inter", system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Outfit", system-ui, sans-serif;
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  /* Glass morphism effect */
+  .glass {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50;
+  }
+
+  /* Glowing text */
+  .text-glow {
+    text-shadow: 0 0 20px hsl(var(--primary) / 0.5);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Animated gradient border */
+  .gradient-border {
+    position: relative;
+    background: hsl(var(--card));
+    border-radius: var(--radius);
+  }
+
+  .gradient-border::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    background: var(--gradient-primary);
+    border-radius: calc(var(--radius) + 1px);
+    z-index: -1;
+    opacity: 0.5;
+    transition: opacity 0.3s ease;
+  }
+
+  .gradient-border:hover::before {
+    opacity: 1;
+  }
+
+  /* Card hover effect */
+  .card-hover {
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .card-hover:hover {
+    @apply -translate-y-1;
+    box-shadow: var(--shadow-glow), var(--shadow-elevated);
+  }
+
+  /* Pulse animation for live badges */
+  .pulse-live {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+    }
+    50% {
+      box-shadow: 0 0 0 8px hsl(var(--primary) / 0);
+    }
+  }
+
+  /* Shimmer loading effect */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted-foreground) / 0.1) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  /* Floating animation */
+  .float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbar */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Custom scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.5);
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary));
   }
 }
