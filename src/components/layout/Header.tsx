@@ -27,7 +27,7 @@ import {
 
 const navLinks = [
   { href: "/events", label: "Events", icon: Calendar },
-  { href: "/events?category=friday-night", label: "Friday", highlight: true },
+  { href: "/discover", label: "Discover", highlight: true },
   { href: "/events?category=saturday-vibes", label: "Saturday" },
   { href: "/events?category=sunday-groove", label: "Sunday" },
 ];
@@ -104,15 +104,25 @@ export function Header() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem onClick={() => navigate('/profile')}>
+                      <User className="h-4 w-4 mr-2" />
+                      My Profile
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate('/my-tickets')}>
                       <Ticket className="h-4 w-4 mr-2" />
                       My Tickets
                     </DropdownMenuItem>
                     {isSeller ? (
-                      <DropdownMenuItem onClick={() => navigate('/seller/dashboard')}>
-                        <LayoutDashboard className="h-4 w-4 mr-2" />
-                        Seller Dashboard
-                      </DropdownMenuItem>
+                      <>
+                        <DropdownMenuItem onClick={() => navigate('/seller/dashboard')}>
+                          <LayoutDashboard className="h-4 w-4 mr-2" />
+                          Seller Dashboard
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate('/seller/analytics')}>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Analytics
+                        </DropdownMenuItem>
+                      </>
                     ) : (
                       <DropdownMenuItem onClick={() => navigate('/seller/apply')}>
                         <Sparkles className="h-4 w-4 mr-2" />

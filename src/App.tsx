@@ -13,8 +13,11 @@ import Register from "./pages/Register";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import MyTickets from "./pages/MyTickets";
+import Profile from "./pages/Profile";
+import Discover from "./pages/Discover";
 import SellerApply from "./pages/SellerApply";
 import SellerDashboard from "./pages/seller/Dashboard";
+import SellerAnalytics from "./pages/seller/Analytics";
 import CreateEvent from "./pages/seller/CreateEvent";
 import NotFound from "./pages/NotFound";
 
@@ -32,13 +35,16 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/events" element={<Events />} />
               <Route path="/events/:id" element={<EventDetail />} />
+              <Route path="/discover" element={<Discover />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/cart" element={<Cart />} />
               <Route path="/checkout" element={<Checkout />} />
               <Route path="/my-tickets" element={<MyTickets />} />
+              <Route path="/profile" element={<Profile />} />
               <Route path="/seller/apply" element={<SellerApply />} />
               <Route path="/seller/dashboard" element={<SellerDashboard />} />
+              <Route path="/seller/analytics" element={<SellerAnalytics />} />
               <Route path="/seller/events/new" element={<CreateEvent />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
