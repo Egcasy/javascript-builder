@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Event } from "@/types";
 import { cn } from "@/lib/utils";
+import { FavoriteButton } from "./FavoriteButton";
 
 interface EventCardProps {
   event: Event;
@@ -165,6 +166,11 @@ export function EventCard({ event, index = 0, variant = "default" }: EventCardPr
               {isAlmostSoldOut && (
                 <Badge variant="limited" className="text-xs">Limited</Badge>
               )}
+            </div>
+            
+            {/* Favorite Button */}
+            <div className="absolute top-3 right-3 z-20">
+              <FavoriteButton eventId={event.id} />
             </div>
           </div>
 
