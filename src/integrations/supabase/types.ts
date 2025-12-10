@@ -124,6 +124,13 @@ export type Database = {
             foreignKeyName: "events_seller_id_fkey"
             columns: ["seller_id"]
             isOneToOne: false
+            referencedRelation: "public_sellers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
             referencedRelation: "sellers"
             referencedColumns: ["id"]
           },
@@ -412,7 +419,36 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_sellers: {
+        Row: {
+          business_name: string | null
+          created_at: string | null
+          description: string | null
+          id: string | null
+          logo_url: string | null
+          tier: string | null
+          verified: boolean | null
+        }
+        Insert: {
+          business_name?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          logo_url?: string | null
+          tier?: string | null
+          verified?: boolean | null
+        }
+        Update: {
+          business_name?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          logo_url?: string | null
+          tier?: string | null
+          verified?: boolean | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {
