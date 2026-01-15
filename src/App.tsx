@@ -19,6 +19,9 @@ import SellerApply from "./pages/SellerApply";
 import SellerDashboard from "./pages/seller/Dashboard";
 import SellerAnalytics from "./pages/seller/Analytics";
 import CreateEvent from "./pages/seller/CreateEvent";
+import QRScanner from "./pages/seller/QRScanner";
+import PromoCodes from "./pages/seller/PromoCodes";
+import PaymentCallback from "./pages/PaymentCallback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +49,9 @@ const App = () => (
               <Route path="/seller/dashboard" element={<SellerDashboard />} />
               <Route path="/seller/analytics" element={<SellerAnalytics />} />
               <Route path="/seller/events/new" element={<CreateEvent />} />
+              <Route path="/seller/scanner" element={<QRScanner />} />
+              <Route path="/seller/promo-codes" element={<PromoCodes />} />
+              <Route path="/payment/callback" element={<PaymentCallback />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
