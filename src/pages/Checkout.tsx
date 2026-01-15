@@ -1,25 +1,25 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { 
-  CreditCard, 
-  Lock, 
-  Check,
-  Loader2
-} from "lucide-react";
+import { CreditCard, Lock, Loader2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Layout } from "@/components/layout/Layout";
 import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useMonnifyPayment } from "@/hooks/useMonnifyPayment";
+import { PromoCodeInput } from "@/components/checkout/PromoCodeInput";
 
 export default function Checkout() {
   const { items, totalPrice, clearCart } = useCart();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { initializePayment, loading: paymentLoading } = useMonnifyPayment();
+  
   const [loading, setLoading] = useState(false);
+  const [appliedPromo, setAppliedPromo] = useState<{ id: string; code: string; amount: number } | null>(null);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-NG', {
@@ -30,7 +30,9 @@ export default function Checkout() {
   };
 
   const generateQRCode = () => {
-    return `TIXHUB-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+    const array = new Uint8Array(16);
+    crypto.getRandomValues(array);
+    return `TIXHUB-${Array.from(array, b => b.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
   };
 
   const handleCheckout = async () => {
@@ -49,60 +51,72 @@ export default function Checkout() {
       }, {} as Record<string, typeof items>);
 
       // Create orders and tickets for each event
+      let firstOrderId = "";
       for (const [eventId, eventItems] of Object.entries(itemsByEvent)) {
-        const orderTotal = eventItems.reduce((sum, item) => {
+        const orderSubtotal = eventItems.reduce((sum, item) => {
           return sum + (item.ticketType?.price ?? 0) * item.quantity;
         }, 0);
 
-        // Create order
+        const discountAmount = appliedPromo ? appliedPromo.amount : 0;
+        const orderTotal = (orderSubtotal - discountAmount) * 1.05;
+
+        // Create order with pending status
         const { data: order, error: orderError } = await supabase
           .from('orders')
           .insert({
             user_id: user.id,
             event_id: eventId,
-            status: 'completed',
-            total_amount: orderTotal * 1.05
+            status: 'pending',
+            total_amount: orderTotal,
+            promo_code_id: appliedPromo?.id || null,
+            discount_amount: discountAmount
           })
           .select()
           .single();
 
         if (orderError) throw orderError;
+        if (!firstOrderId) firstOrderId = order.id;
 
-        // Create tickets for each item
+        // Create tickets
         for (const item of eventItems) {
           const ticketsToCreate = Array.from({ length: item.quantity }, () => ({
             order_id: order.id,
             ticket_type_id: item.ticket_type_id,
             user_id: user.id,
             qr_code: generateQRCode(),
-            status: 'valid'
+            status: 'pending'
           }));
 
-          const { error: ticketsError } = await supabase
-            .from('tickets')
-            .insert(ticketsToCreate);
-
+          const { error: ticketsError } = await supabase.from('tickets').insert(ticketsToCreate);
           if (ticketsError) throw ticketsError;
-
-          // Update ticket type sold count
-          await supabase
-            .from('ticket_types')
-            .update({ 
-              sold: (item.ticketType?.price ?? 0) + item.quantity 
-            })
-            .eq('id', item.ticket_type_id);
         }
       }
 
-      // Clear cart
-      await clearCart();
+      // Update promo code usage
+      if (appliedPromo) {
+        await supabase
+          .from('promo_codes')
+          .update({ used_count: 1 })
+          .eq('id', appliedPromo.id);
+      }
 
-      toast({
-        title: "Purchase Complete!",
-        description: "Your tickets are ready. Check your email and My Tickets."
+      // Store order ID for callback
+      localStorage.setItem("pendingOrderId", firstOrderId);
+
+      // Initialize Monnify payment
+      const result = await initializePayment({
+        orderId: firstOrderId,
+        amount: total,
+        customerEmail: profile?.email || user.email || "",
+        customerName: profile?.full_name || "Customer",
+        description: `TixHub Tickets - ${items.length} item(s)`
       });
 
-      navigate('/my-tickets');
+      if (result.success && result.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+      } else {
+        throw new Error(result.error || "Payment initialization failed");
+      }
     } catch (error) {
       console.error('Checkout error:', error);
       toast({
@@ -110,7 +124,6 @@ export default function Checkout() {
         description: "Something went wrong. Please try again.",
         variant: "destructive"
       });
-    } finally {
       setLoading(false);
     }
   };
@@ -125,8 +138,10 @@ export default function Checkout() {
     return null;
   }
 
-  const serviceFee = totalPrice * 0.05;
-  const total = totalPrice + serviceFee;
+  const discount = appliedPromo?.amount || 0;
+  const subtotalAfterDiscount = totalPrice - discount;
+  const serviceFee = subtotalAfterDiscount * 0.05;
+  const total = subtotalAfterDiscount + serviceFee;
 
   return (
     <Layout>
@@ -137,7 +152,7 @@ export default function Checkout() {
           className="max-w-2xl mx-auto"
         >
           <div className="flex items-center gap-2 mb-8">
-            <Lock className="h-5 w-5 text-success" />
+            <Lock className="h-5 w-5 text-green-500" />
             <span className="text-sm text-muted-foreground">Secure Checkout</span>
           </div>
 
@@ -150,9 +165,7 @@ export default function Checkout() {
             <div className="space-y-3">
               {items.map((item) => (
                 <div key={item.id} className="flex justify-between text-sm">
-                  <span>
-                    {item.ticketType?.event?.title} - {item.ticketType?.name} x{item.quantity}
-                  </span>
+                  <span>{item.ticketType?.event?.title} - {item.ticketType?.name} x{item.quantity}</span>
                   <span>{formatPrice((item.ticketType?.price ?? 0) * item.quantity)}</span>
                 </div>
               ))}
@@ -160,11 +173,28 @@ export default function Checkout() {
 
             <div className="border-t border-border my-4" />
 
+            {/* Promo Code */}
+            <div className="mb-4">
+              <PromoCodeInput
+                eventId={items[0]?.ticketType?.event_id}
+                subtotal={totalPrice}
+                appliedCode={appliedPromo}
+                onApply={(promo) => setAppliedPromo(promo)}
+                onRemove={() => setAppliedPromo(null)}
+              />
+            </div>
+
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
                 <span>{formatPrice(totalPrice)}</span>
               </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-sm text-green-600">
+                  <span>Discount ({appliedPromo?.code})</span>
+                  <span>-{formatPrice(discount)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Service Fee (5%)</span>
                 <span>{formatPrice(serviceFee)}</span>
@@ -175,44 +205,41 @@ export default function Checkout() {
 
             <div className="flex justify-between items-center">
               <span className="font-display font-semibold">Total</span>
-              <span className="font-display text-2xl font-bold text-primary">
-                {formatPrice(total)}
-              </span>
+              <span className="font-display text-2xl font-bold text-primary">{formatPrice(total)}</span>
             </div>
           </div>
 
-          {/* Payment - Demo */}
+          {/* Payment Method */}
           <div className="bg-card border border-border rounded-xl p-6 mb-6">
             <h2 className="font-display text-lg font-semibold mb-4 flex items-center gap-2">
               <CreditCard className="h-5 w-5" />
               Payment Method
             </h2>
             
-            <div className="p-4 bg-muted/50 rounded-lg border border-border text-center">
-              <p className="text-sm text-muted-foreground mb-2">Demo Mode</p>
+            <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
+              <p className="text-sm font-medium mb-1">Pay with Monnify</p>
               <p className="text-xs text-muted-foreground">
-                This is a demo checkout. No real payment will be processed.
+                Card, Bank Transfer, USSD - You'll be redirected to complete payment
               </p>
             </div>
           </div>
 
-          {/* Complete Order */}
           <Button 
             variant="hero" 
-            size="xl" 
+            size="lg" 
             className="w-full gap-2"
             onClick={handleCheckout}
-            disabled={loading}
+            disabled={loading || paymentLoading}
           >
-            {loading ? (
+            {loading || paymentLoading ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
                 Processing...
               </>
             ) : (
               <>
-                <Check className="h-5 w-5" />
-                Complete Purchase - {formatPrice(total)}
+                <ExternalLink className="h-5 w-5" />
+                Pay {formatPrice(total)}
               </>
             )}
           </Button>

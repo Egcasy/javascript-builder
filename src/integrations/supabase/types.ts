@@ -213,9 +213,12 @@ export type Database = {
       orders: {
         Row: {
           created_at: string
+          discount_amount: number | null
           event_id: string
           id: string
           payment_intent_id: string | null
+          payment_reference: string | null
+          promo_code_id: string | null
           status: string | null
           total_amount: number
           updated_at: string
@@ -223,9 +226,12 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          discount_amount?: number | null
           event_id: string
           id?: string
           payment_intent_id?: string | null
+          payment_reference?: string | null
+          promo_code_id?: string | null
           status?: string | null
           total_amount: number
           updated_at?: string
@@ -233,9 +239,12 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          discount_amount?: number | null
           event_id?: string
           id?: string
           payment_intent_id?: string | null
+          payment_reference?: string | null
+          promo_code_id?: string | null
           status?: string | null
           total_amount?: number
           updated_at?: string
@@ -247,6 +256,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_promo_code_id_fkey"
+            columns: ["promo_code_id"]
+            isOneToOne: false
+            referencedRelation: "promo_codes"
             referencedColumns: ["id"]
           },
         ]
@@ -283,6 +299,76 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      promo_codes: {
+        Row: {
+          code: string
+          created_at: string
+          discount_type: string
+          discount_value: number
+          event_id: string | null
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          max_uses: number | null
+          min_purchase: number | null
+          seller_id: string
+          updated_at: string
+          used_count: number | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          discount_type?: string
+          discount_value: number
+          event_id?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_uses?: number | null
+          min_purchase?: number | null
+          seller_id: string
+          updated_at?: string
+          used_count?: number | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          discount_type?: string
+          discount_value?: number
+          event_id?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_uses?: number | null
+          min_purchase?: number | null
+          seller_id?: string
+          updated_at?: string
+          used_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promo_codes_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "promo_codes_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "public_sellers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "promo_codes_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "sellers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sellers: {
         Row: {
@@ -432,6 +518,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_preferences: {
+        Row: {
+          created_at: string
+          favorite_categories: string[] | null
+          favorite_cities: string[] | null
+          id: string
+          price_range_max: number | null
+          price_range_min: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          favorite_categories?: string[] | null
+          favorite_cities?: string[] | null
+          id?: string
+          price_range_max?: number | null
+          price_range_min?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          favorite_categories?: string[] | null
+          favorite_cities?: string[] | null
+          id?: string
+          price_range_max?: number | null
+          price_range_min?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
