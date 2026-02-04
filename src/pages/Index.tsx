@@ -9,14 +9,25 @@ import {
   Calendar,
   MapPin,
   Star,
-  Play
+  Play,
+  Search,
+  BadgeCheck,
+  CreditCard,
+  Smartphone
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Layout } from "@/components/layout/Layout";
 import { EventCard } from "@/components/events/EventCard";
 import { mockEvents, getFeaturedEvents, getHotEvents } from "@/data/mockEvents";
 import heroBg from "@/assets/hero-bg.jpg";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 const stats = [
   { value: "50K+", label: "Events Hosted" },
@@ -50,6 +61,72 @@ const categories = [
   { id: "beach-party", label: "Beach Parties", emoji: "🏖️", count: 15 },
   { id: "festival", label: "Festivals", emoji: "🎪", count: 8 },
   { id: "concert", label: "Concerts", emoji: "🎤", count: 34 },
+];
+
+const testimonials = [
+  {
+    name: "Adaobi N.",
+    role: "Weekend Explorer",
+    quote:
+      "TixHub made it effortless to grab tickets for a last‑minute concert. The QR code delivery was instant and super smooth.",
+  },
+  {
+    name: "Tunde A.",
+    role: "Event Organizer",
+    quote:
+      "Our sales doubled after moving to TixHub. The analytics and promo codes help us plan better events.",
+  },
+  {
+    name: "Kemi O.",
+    role: "Festival Lover",
+    quote:
+      "I love the curated events and verified sellers. It feels safe and premium every time I book.",
+  },
+];
+
+const trustBadges = [
+  { icon: CreditCard, label: "Paystack Secured", detail: "PCI‑DSS payments" },
+  { icon: BadgeCheck, label: "Verified Sellers", detail: "Curated listings only" },
+  { icon: Smartphone, label: "Instant Delivery", detail: "QR codes in minutes" },
+  { icon: Shield, label: "24/7 Support", detail: "Chat and email help" },
+];
+
+const howItWorks = [
+  {
+    icon: Search,
+    title: "Discover",
+    description: "Explore curated events, trending parties, and verified sellers.",
+  },
+  {
+    icon: CreditCard,
+    title: "Secure Checkout",
+    description: "Pay with trusted providers and get instant confirmation.",
+  },
+  {
+    icon: Smartphone,
+    title: "Show & Go",
+    description: "Your QR code ticket is delivered instantly in-app and email.",
+  },
+];
+
+const faqs = [
+  {
+    question: "Are tickets refundable?",
+    answer:
+      "Refunds depend on the organizer policy. TixHub will always show refund eligibility on the event page.",
+  },
+  {
+    question: "How do I receive my ticket?",
+    answer: "After payment, your QR code ticket is delivered instantly to your account and email.",
+  },
+  {
+    question: "Can I transfer my ticket?",
+    answer: "Yes. You can transfer tickets to friends from your account dashboard.",
+  },
+  {
+    question: "Is my payment secure?",
+    answer: "All payments are processed through PCI‑compliant providers with fraud protection.",
+  },
 ];
 
 export default function Index() {
@@ -277,6 +354,200 @@ export default function Index() {
                 </p>
               </motion.div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section className="py-16 md:py-24 bg-gradient-dark">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <Badge variant="secondary" className="mb-3">
+              Simple & Fast
+            </Badge>
+            <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">
+              Book in Three Easy Steps
+            </h2>
+            <p className="text-muted-foreground max-w-xl mx-auto">
+              From discovery to entry, TixHub keeps every step friction-free.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            {howItWorks.map((step) => (
+              <div
+                key={step.title}
+                className="p-6 rounded-2xl bg-card border border-border text-center hover:border-primary/50 transition-all"
+              >
+                <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-primary/10 text-primary mb-4">
+                  <step.icon className="h-6 w-6" />
+                </div>
+                <h3 className="font-display text-xl font-semibold mb-2">{step.title}</h3>
+                <p className="text-muted-foreground">{step.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Trust & Partnerships */}
+      <section className="py-16 md:py-24">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <Badge variant="secondary" className="mb-3">
+              Trusted Nationwide
+            </Badge>
+            <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">
+              Payments, Partners, and Protection You Can Count On
+            </h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              From secure payments to verified sellers, TixHub keeps your night out seamless and safe.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-4 gap-6 mb-12">
+            {trustBadges.map((badge) => (
+              <div
+                key={badge.label}
+                className="p-6 rounded-2xl bg-card border border-border text-center hover:border-primary/50 transition-all"
+              >
+                <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-primary/10 text-primary mb-4">
+                  <badge.icon className="h-6 w-6" />
+                </div>
+                <p className="font-display text-lg font-semibold mb-2">{badge.label}</p>
+                <p className="text-sm text-muted-foreground">{badge.detail}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 items-center text-center text-sm text-muted-foreground">
+            {["BeatFM", "Pulse Nigeria", "Island Vibes", "Club Nova", "City FM"].map((partner) => (
+              <div
+                key={partner}
+                className="py-4 px-3 rounded-xl border border-dashed border-border bg-card/40"
+              >
+                {partner}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials */}
+      <section className="py-16 md:py-24">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-12">
+            <div>
+              <Badge variant="featured" className="mb-3">
+                <Star className="h-3 w-3 mr-1" />
+                Loved by the Community
+              </Badge>
+              <h2 className="font-display text-3xl md:text-4xl font-bold">
+                Real Stories From Real Event‑Goers
+              </h2>
+            </div>
+            <p className="text-muted-foreground max-w-xl">
+              Thousands of people use TixHub every weekend to discover new experiences, and they keep
+              coming back.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            {testimonials.map((testimonial) => (
+              <div
+                key={testimonial.name}
+                className="p-6 rounded-2xl bg-card border border-border hover:border-primary/50 transition-all"
+              >
+                <p className="text-muted-foreground mb-6">“{testimonial.quote}”</p>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
+                    {testimonial.name.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-semibold">{testimonial.name}</p>
+                    <p className="text-sm text-muted-foreground">{testimonial.role}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* App Download CTA */}
+      <section className="py-16 md:py-24 bg-gradient-dark">
+        <div className="container mx-auto px-4">
+          <div className="grid lg:grid-cols-2 gap-10 items-center rounded-3xl border border-border bg-gradient-card p-8 md:p-12">
+            <div>
+              <Badge variant="secondary" className="mb-4">
+                Coming Soon
+              </Badge>
+              <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">
+                Take TixHub With You
+              </h2>
+              <p className="text-muted-foreground mb-6">
+                Join the waitlist for the TixHub mobile app and get early access to exclusive drops,
+                instant notifications, and personalized event alerts.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Input
+                  type="email"
+                  placeholder="you@email.com"
+                  className="h-12 bg-background"
+                />
+                <Button variant="hero" size="lg" className="gap-2">
+                  Join App Waitlist
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                No spam. Early access alerts only.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {["Smart alerts", "1‑tap checkout", "Offline tickets", "VIP drops"].map((perk) => (
+                <div key={perk} className="p-4 rounded-2xl bg-card border border-border">
+                  <p className="font-semibold mb-1">{perk}</p>
+                  <p className="text-sm text-muted-foreground">Built for busy nights out.</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="py-16 md:py-24">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <Badge variant="secondary" className="mb-3">
+              Quick Answers
+            </Badge>
+            <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">
+              Frequently Asked Questions
+            </h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Everything you need to know before you book your next event.
+            </p>
+          </div>
+
+          <div className="max-w-3xl mx-auto">
+            <Accordion type="single" collapsible className="space-y-4">
+              {faqs.map((item) => (
+                <AccordionItem
+                  key={item.question}
+                  value={item.question}
+                  className="border border-border rounded-2xl bg-card px-4"
+                >
+                  <AccordionTrigger className="font-display text-left text-lg font-semibold">
+                    {item.question}
+                  </AccordionTrigger>
+                  <AccordionContent className="text-muted-foreground">
+                    {item.answer}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           </div>
         </div>
       </section>
