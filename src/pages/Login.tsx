@@ -11,7 +11,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { auth, googleProvider } from "@/integrations/firebase/client";
+import { onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -22,51 +23,36 @@ export default function Login() {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
         navigate("/");
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        navigate("/");
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    return () => unsubscribe();
   }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      toast.error(error.message);
-    } else {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
       toast.success("Login successful!");
+    } catch (error: any) {
+      toast.error(error.message);
     }
     setIsLoading(false);
   };
 
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/`,
-      },
-    });
-
-    if (error) {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error: any) {
       toast.error(error.message);
       setIsGoogleLoading(false);
     }
+    setIsGoogleLoading(false);
   };
 
   return (

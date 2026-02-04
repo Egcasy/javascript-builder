@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { 
   Calendar, 
@@ -20,16 +20,30 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Layout } from "@/components/layout/Layout";
-import { getEventById, mockEvents } from "@/data/mockEvents";
 import { EventCard } from "@/components/events/EventCard";
 import { TicketType } from "@/types";
 import { toast } from "sonner";
+import { useEvent, useEvents } from "@/hooks/useEvents";
+import { useCart } from "@/contexts/CartContext";
 
 export default function EventDetail() {
   const { id } = useParams();
-  const event = getEventById(id || "");
+  const navigate = useNavigate();
+  const { data: event, isLoading } = useEvent(id || "");
+  const { data: relatedEvents = [] } = useEvents();
   const [selectedTickets, setSelectedTickets] = useState<Record<string, number>>({});
   const [isLiked, setIsLiked] = useState(false);
+  const { addToCart } = useCart();
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-20 text-center text-muted-foreground">
+          Loading event details...
+        </div>
+      </Layout>
+    );
+  }
 
   if (!event) {
     return (
@@ -84,12 +98,19 @@ export default function EventDetail() {
     return Object.values(selectedTickets).reduce((sum, qty) => sum + qty, 0);
   };
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (getTotalTickets() === 0) {
       toast.error("Please select at least one ticket");
       return;
     }
-    toast.success("Proceeding to checkout...");
+    const ticketSelections = Object.entries(selectedTickets);
+    for (const [ticketId, qty] of ticketSelections) {
+      if (qty > 0) {
+        await addToCart(ticketId, qty);
+      }
+    }
+    toast.success("Tickets added to your cart");
+    navigate("/cart");
   };
 
   const handleShare = () => {
@@ -98,7 +119,7 @@ export default function EventDetail() {
   };
 
   const soldPercentage = (event.soldTickets / event.totalTickets) * 100;
-  const relatedEvents = mockEvents.filter((e) => e.id !== event.id).slice(0, 3);
+  const related = relatedEvents.filter((e) => e.id !== event.id).slice(0, 3);
 
   return (
     <Layout>
@@ -354,7 +375,7 @@ export default function EventDetail() {
             You Might Also Like
           </h2>
           <div className="grid md:grid-cols-3 gap-6">
-            {relatedEvents.map((event, index) => (
+            {related.map((event, index) => (
               <EventCard key={event.id} event={event} index={index} />
             ))}
           </div>

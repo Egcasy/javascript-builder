@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 import { useAuth } from './AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
@@ -52,44 +53,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     
     setLoading(true);
-    const { data, error } = await supabase
-      .from('cart_items')
-      .select(`
-        id,
-        ticket_type_id,
-        quantity,
-        ticket_types (
-          id,
-          name,
-          price,
-          event_id,
-          events (
-            id,
-            title,
-            cover_image,
-            date
-          )
-        )
-      `)
-      .eq('user_id', user.id);
-
-    if (error) {
-      console.error('Error fetching cart:', error);
-    } else if (data) {
-      const formattedItems = data.map((item: any) => ({
-        id: item.id,
-        ticket_type_id: item.ticket_type_id,
-        quantity: item.quantity,
-        ticketType: item.ticket_types ? {
-          id: item.ticket_types.id,
-          name: item.ticket_types.name,
-          price: item.ticket_types.price,
-          event_id: item.ticket_types.event_id,
-          event: item.ticket_types.events
-        } : undefined
-      }));
-      setItems(formattedItems);
-    }
+    const cartSnapshot = await getDocs(collection(db, "users", user.uid, "cart_items"));
+    const formattedItems = cartSnapshot.docs.map((docSnap) => {
+      const data = docSnap.data() as CartItem;
+      return {
+        id: docSnap.id,
+        ticket_type_id: data.ticket_type_id,
+        quantity: data.quantity,
+        ticketType: data.ticketType,
+      };
+    });
+    setItems(formattedItems);
     setLoading(false);
   };
 
@@ -103,28 +77,57 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const { error } = await supabase
-      .from('cart_items')
-      .upsert({
-        user_id: user.id,
-        ticket_type_id: ticketTypeId,
-        quantity
-      }, {
-        onConflict: 'user_id,ticket_type_id'
-      });
+    try {
+      const eventSnapshot = await getDocs(
+        query(collection(db, "events"), where("ticket_type_ids", "array-contains", ticketTypeId))
+      );
+      const eventDoc = eventSnapshot.docs[0];
+      const eventData = eventDoc?.data() as any;
+      const ticketType = eventData?.ticket_types?.find((ticket: any) => ticket.id === ticketTypeId);
 
-    if (error) {
+      const cartItemRef = doc(db, "users", user.uid, "cart_items", ticketTypeId);
+      const existingSnapshot = await getDoc(cartItemRef);
+      const existingQuantity = existingSnapshot.exists()
+        ? (existingSnapshot.data() as { quantity?: number }).quantity || 0
+        : 0;
+      const nextQuantity = existingQuantity + quantity;
+
+      await setDoc(
+        cartItemRef,
+        {
+          ticket_type_id: ticketTypeId,
+          quantity: nextQuantity,
+          ticketType: ticketType
+            ? {
+                id: ticketTypeId,
+                name: ticketType.name,
+                price: ticketType.price,
+                event_id: eventDoc?.id,
+                event: eventDoc
+                  ? {
+                      id: eventDoc.id,
+                      title: eventData?.title || "Event",
+                      cover_image: eventData?.cover_image || null,
+                      date: eventData?.date || "",
+                    }
+                  : undefined,
+              }
+            : undefined,
+        },
+        { merge: true }
+      );
+
+      toast({
+        title: "Added to cart",
+        description: "Tickets added successfully",
+      });
+      fetchCart();
+    } catch (error) {
       toast({
         title: "Error",
         description: "Failed to add to cart",
-        variant: "destructive"
+        variant: "destructive",
       });
-    } else {
-      toast({
-        title: "Added to cart",
-        description: "Tickets added successfully"
-      });
-      fetchCart();
     }
   };
 
@@ -134,50 +137,37 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const { error } = await supabase
-      .from('cart_items')
-      .update({ quantity })
-      .eq('id', itemId);
-
-    if (error) {
+    try {
+      await updateDoc(doc(db, "users", user!.uid, "cart_items", itemId), { quantity });
+      fetchCart();
+    } catch (error) {
       toast({
         title: "Error",
         description: "Failed to update quantity",
-        variant: "destructive"
+        variant: "destructive",
       });
-    } else {
-      fetchCart();
     }
   };
 
   const removeFromCart = async (itemId: string) => {
-    const { error } = await supabase
-      .from('cart_items')
-      .delete()
-      .eq('id', itemId);
-
-    if (error) {
+    try {
+      await deleteDoc(doc(db, "users", user!.uid, "cart_items", itemId));
+      fetchCart();
+    } catch (error) {
       toast({
         title: "Error",
         description: "Failed to remove item",
-        variant: "destructive"
+        variant: "destructive",
       });
-    } else {
-      fetchCart();
     }
   };
 
   const clearCart = async () => {
     if (!user) return;
 
-    const { error } = await supabase
-      .from('cart_items')
-      .delete()
-      .eq('user_id', user.id);
-
-    if (!error) {
-      setItems([]);
-    }
+    const cartSnapshot = await getDocs(collection(db, "users", user.uid, "cart_items"));
+    await Promise.all(cartSnapshot.docs.map((docSnap) => deleteDoc(docSnap.ref)));
+    setItems([]);
   };
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);

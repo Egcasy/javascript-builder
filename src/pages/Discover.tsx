@@ -8,20 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Layout } from "@/components/layout/Layout";
 import { EventCard } from "@/components/events/EventCard";
+import { useEvents } from "@/hooks/useEvents";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-
-const categories = [
-  { id: "all", label: "All Events", icon: "🎫" },
-  { id: "friday-night", label: "Friday Night", icon: "🎉" },
-  { id: "saturday-vibes", label: "Saturday", icon: "🔥" },
-  { id: "sunday-groove", label: "Sunday", icon: "☀️" },
-  { id: "concert", label: "Concerts", icon: "🎤" },
-  { id: "festival", label: "Festivals", icon: "🎪" },
-  { id: "beach-party", label: "Beach Party", icon: "🏖️" },
-];
-
-const cities = ["All Cities", "Lagos", "Abuja", "Port Harcourt", "Ibadan", "Kano"];
+import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 export default function Discover() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -30,96 +20,49 @@ export default function Discover() {
   const [selectedCity, setSelectedCity] = useState(searchParams.get("city") || "All Cities");
   const [sortBy, setSortBy] = useState<string>("date");
 
-  // Fetch events from database
-  const { data: events, isLoading } = useQuery({
-    queryKey: ["discover-events", selectedCategory, selectedCity, sortBy],
+  const { data: categoryOptions = [] } = useQuery({
+    queryKey: ["discover-categories"],
     queryFn: async () => {
-      let query = supabase
-        .from("events")
-        .select(`*, venues(name, city, address), ticket_types(price)`)
-        .in("status", ["active", "sold-out"]);
-
-      if (selectedCategory !== "all") {
-        query = query.eq("category", selectedCategory);
-      }
-
-      if (selectedCity !== "All Cities") {
-        query = query.eq("venues.city", selectedCity);
-      }
-
-      if (sortBy === "date") {
-        query = query.order("date", { ascending: true });
-      } else if (sortBy === "popular") {
-        query = query.order("sold_tickets", { ascending: false });
-      }
-
-      const { data } = await query;
-      return data || [];
+      const snapshot = await getDocs(query(collection(db, "event_categories"), orderBy("order", "asc")));
+      return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as { label: string; icon?: string }) }));
     },
   });
 
-  // Fetch trending events
-  const { data: trendingEvents } = useQuery({
-    queryKey: ["trending-events"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("events")
-        .select(`*, venues(name, city)`)
-        .eq("status", "active")
-        .eq("is_hot", true)
-        .limit(5);
-      return data || [];
-    },
+  const { data: events = [], isLoading } = useEvents({
+    category: selectedCategory === "all" ? undefined : selectedCategory,
+    city: selectedCity === "All Cities" ? undefined : selectedCity,
+    search: searchQuery || undefined,
   });
+  const { data: allEvents = [] } = useEvents();
 
-  const filteredEvents = events?.filter((event: any) => {
-    if (!searchQuery) return true;
-    return (
-      event.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.venues?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.venues?.city?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  });
+  const cities = [
+    "All Cities",
+    ...Array.from(new Set(allEvents.map((event) => event.venue.city).filter(Boolean))).sort(),
+  ];
+  const categories = [
+    { id: "all", label: "All Events", icon: "🎫" },
+    ...categoryOptions.map((category) => ({
+      id: category.id,
+      label: category.label,
+      icon: category.icon,
+    })),
+  ];
+
+  const filteredEvents = [...events];
+  if (sortBy === "popular") {
+    filteredEvents.sort((a, b) => b.soldTickets - a.soldTickets);
+  } else {
+    filteredEvents.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  const trendingEvents = events.filter((event) => event.isHot).slice(0, 5);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setSearchParams({ q: searchQuery, category: selectedCategory, city: selectedCity });
   };
 
-  // Transform DB events to match EventCard props
-  const transformEvent = (event: any) => ({
-    id: event.id,
-    title: event.title,
-    description: event.description || "",
-    shortDescription: event.short_description || "",
-    images: event.images || [],
-    coverImage: event.cover_image || "/placeholder.svg",
-    venue: {
-      name: event.venues?.name || "TBA",
-      address: event.venues?.address || "",
-      city: event.venues?.city || "",
-    },
-    date: event.date,
-    time: event.start_time,
-    category: event.category,
-    tags: event.tags || [],
-    ticketTypes: event.ticket_types?.map((t: any) => ({
-      id: t.id,
-      name: t.name,
-      price: Number(t.price),
-      available: t.quantity - (t.sold || 0),
-      sold: t.sold || 0,
-      maxPerOrder: t.max_per_order || 10,
-    })) || [],
-    totalTickets: event.total_tickets || 0,
-    soldTickets: event.sold_tickets || 0,
-    status: event.status,
-    isFeatured: event.is_featured,
-    isHot: event.is_hot,
-    organizer: { id: event.seller_id, name: "Organizer", logo: "", verified: true, tier: "gold" as const },
-    createdAt: event.created_at,
-    updatedAt: event.updated_at,
-  });
+  const transformEvent = (event: any) => event;
 
   return (
     <Layout>
@@ -196,14 +139,20 @@ export default function Discover() {
                   to={`/events/${event.id}`}
                   className="flex-shrink-0 flex items-center gap-4 p-4 bg-card rounded-xl border border-border hover:border-primary/50 transition-colors min-w-[300px]"
                 >
-                  <img
-                    src={event.cover_image || "/placeholder.svg"}
-                    alt={event.title}
-                    className="h-16 w-16 rounded-lg object-cover"
-                  />
+                  {event.coverImage ? (
+                    <img
+                      src={event.coverImage}
+                      alt={event.title}
+                      className="h-16 w-16 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="h-16 w-16 rounded-lg bg-muted flex items-center justify-center">
+                      <Calendar className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                  )}
                   <div>
                     <p className="font-medium line-clamp-1">{event.title}</p>
-                    <p className="text-sm text-muted-foreground">{event.venues?.city}</p>
+                    <p className="text-sm text-muted-foreground">{event.venue?.city}</p>
                   </div>
                   <Badge variant="hot" className="ml-auto">
                     <TrendingUp className="h-3 w-3 mr-1" />
@@ -228,7 +177,7 @@ export default function Discover() {
                     : "bg-card border-border hover:border-primary/50"
                 }`}
               >
-                <span>{cat.icon}</span>
+                {cat.icon && <span>{cat.icon}</span>}
                 <span>{cat.label}</span>
               </button>
             ))}

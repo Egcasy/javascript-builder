@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
   QrCode, 
-  Camera, 
   CheckCircle, 
   XCircle, 
   Search,
@@ -16,10 +15,11 @@ import {
   Calendar,
   AlertTriangle
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { collection, doc, getDoc, getDocs, query, updateDoc, where } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface TicketInfo {
   id: string;
@@ -63,48 +63,31 @@ export default function QRScanner() {
     setScanResult(null);
 
     try {
-      const { data: ticket, error } = await supabase
-        .from("tickets")
-        .select(`
-          id,
-          qr_code,
-          status,
-          checked_in_at,
-          ticket_type_id,
-          user_id
-        `)
-        .eq("qr_code", qrCode)
-        .single();
+      const ticketSnapshot = await getDocs(
+        query(collection(db, "tickets"), where("qr_code", "==", qrCode))
+      );
 
-      if (error || !ticket) {
+      const ticketDoc = ticketSnapshot.docs[0];
+      if (!ticketDoc) {
         setScanResult("error");
         setScanMessage("Ticket not found");
         return;
       }
 
-      // Get ticket type and event info
-      const { data: ticketType } = await supabase
-        .from("ticket_types")
-        .select(`
-          name,
-          event_id
-        `)
-        .eq("id", ticket.ticket_type_id)
-        .single();
+      const ticket = ticketDoc.data() as {
+        qr_code: string;
+        status: string;
+        checked_in_at: string | null;
+        ticket_type_id: string;
+        user_id: string;
+        event_id: string;
+      };
 
-      // Get event info
-      const { data: event } = await supabase
-        .from("events")
-        .select("title, date, seller_id")
-        .eq("id", ticketType?.event_id)
-        .single();
+      const eventSnap = await getDoc(doc(db, "events", ticket.event_id));
+      const event = eventSnap.exists() ? (eventSnap.data() as { title?: string; date?: string; seller_id?: string; ticket_types?: Array<{ id?: string; name?: string }> }) : null;
 
-      // Get seller info to verify access
-      const { data: seller } = await supabase
-        .from("sellers")
-        .select("id")
-        .eq("user_id", user?.id)
-        .single();
+      const sellerSnap = await getDoc(doc(db, "sellers", user?.uid || ""));
+      const seller = sellerSnap.exists() ? { id: sellerSnap.id } : null;
 
       if (event?.seller_id !== seller?.id) {
         setScanResult("error");
@@ -112,17 +95,15 @@ export default function QRScanner() {
         return;
       }
 
-      // Get user profile
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name, email")
-        .eq("user_id", ticket.user_id)
-        .single();
+      const profileSnap = await getDoc(doc(db, "profiles", ticket.user_id));
+      const profile = profileSnap.exists() ? (profileSnap.data() as { full_name?: string; email?: string }) : null;
+
+      const ticketType = event?.ticket_types?.find((type) => type.id === ticket.ticket_type_id);
 
       const fullTicketInfo: TicketInfo = {
-        id: ticket.id,
+        id: ticketDoc.id,
         qr_code: ticket.qr_code,
-        status: ticket.status || 'valid',
+        status: ticket.status || "valid",
         checked_in_at: ticket.checked_in_at,
         ticket_type: {
           name: ticketType?.name || "Unknown",
@@ -163,15 +144,10 @@ export default function QRScanner() {
 
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from("tickets")
-        .update({
-          status: "used",
-          checked_in_at: new Date().toISOString(),
-        })
-        .eq("id", ticketInfo.id);
-
-      if (error) throw error;
+      await updateDoc(doc(db, "tickets", ticketInfo.id), {
+        status: "used",
+        checked_in_at: new Date().toISOString(),
+      });
 
       toast({
         title: "Check-in successful!",

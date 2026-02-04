@@ -29,9 +29,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tag, Plus, Trash2, Copy, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, where } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface PromoCode {
   id: string;
@@ -85,31 +86,22 @@ export default function PromoCodes() {
   const fetchData = async () => {
     try {
       // Get seller id
-      const { data: seller } = await supabase
-        .from("sellers")
-        .select("id")
-        .eq("user_id", user!.id)
-        .single();
+      const sellerSnap = await getDoc(doc(db, "sellers", user!.uid));
+      if (!sellerSnap.exists()) {
+        setLoading(false);
+        return;
+      }
+      setSellerId(sellerSnap.id);
 
-      if (!seller) return;
-      setSellerId(seller.id);
+      const codesSnapshot = await getDocs(
+        query(collection(db, "promo_codes"), where("seller_id", "==", sellerSnap.id), orderBy("created_at", "desc"))
+      );
+      const sellerEventsSnapshot = await getDocs(
+        query(collection(db, "events"), where("seller_id", "==", sellerSnap.id), orderBy("date", "desc"))
+      );
 
-      // Fetch promo codes
-      const { data: codes } = await supabase
-        .from("promo_codes")
-        .select("*")
-        .eq("seller_id", seller.id)
-        .order("created_at", { ascending: false });
-
-      // Fetch events for dropdown
-      const { data: sellerEvents } = await supabase
-        .from("events")
-        .select("id, title")
-        .eq("seller_id", seller.id)
-        .order("date", { ascending: false });
-
-      setPromoCodes(codes || []);
-      setEvents(sellerEvents || []);
+      setPromoCodes(codesSnapshot.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as PromoCode) })));
+      setEvents(sellerEventsSnapshot.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as Event) })));
     } catch (error) {
       console.error("Fetch error:", error);
     } finally {
@@ -131,7 +123,7 @@ export default function PromoCodes() {
 
     setCreating(true);
     try {
-      const { error } = await supabase.from("promo_codes").insert({
+      await addDoc(collection(db, "promo_codes"), {
         seller_id: sellerId,
         code: newCode.code.toUpperCase(),
         discount_type: newCode.discount_type,
@@ -140,9 +132,10 @@ export default function PromoCodes() {
         min_purchase: newCode.min_purchase ? parseFloat(newCode.min_purchase) : 0,
         expires_at: newCode.expires_at || null,
         event_id: newCode.event_id === "all" ? null : newCode.event_id,
+        used_count: 0,
+        is_active: true,
+        created_at: new Date().toISOString(),
       });
-
-      if (error) throw error;
 
       toast({ title: "Promo code created!" });
       setDialogOpen(false);
@@ -169,8 +162,7 @@ export default function PromoCodes() {
 
   const handleDelete = async (id: string) => {
     try {
-      const { error } = await supabase.from("promo_codes").delete().eq("id", id);
-      if (error) throw error;
+      await deleteDoc(doc(db, "promo_codes", id));
       toast({ title: "Promo code deleted" });
       setPromoCodes(promoCodes.filter((p) => p.id !== id));
     } catch (error: any) {

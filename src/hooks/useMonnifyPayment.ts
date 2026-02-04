@@ -1,104 +1,127 @@
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
-interface PaymentParams {
+const MONNIFY_BASE_URL = "https://sandbox.monnify.com";
+const MONNIFY_API_KEY = "MK_TEST_VZ1UGXMXPJ";
+const MONNIFY_SECRET_KEY = "YQFMQKM8TQ4GHCFKXB5E3ELYSHBF98DN";
+const MONNIFY_CONTRACT_CODE = "3636171648";
+
+interface InitializePaymentParams {
   orderId: string;
   amount: number;
   customerEmail: string;
   customerName: string;
-  description?: string;
+  description: string;
+  redirectUrl: string;
 }
 
-interface PaymentResult {
-  success: boolean;
-  checkoutUrl?: string;
-  paymentReference?: string;
-  error?: string;
-}
-
-interface VerifyResult {
-  success: boolean;
+interface VerifyPaymentResult {
   status: string;
   amount?: number;
-  error?: string;
+  paymentReference?: string;
 }
+
+const getAuthToken = async () => {
+  const credentials = btoa(`${MONNIFY_API_KEY}:${MONNIFY_SECRET_KEY}`);
+  const response = await fetch(`${MONNIFY_BASE_URL}/api/v1/auth/login`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Failed to authenticate with Monnify");
+  }
+
+  const data = await response.json();
+  return data?.responseBody?.accessToken as string;
+};
 
 export const useMonnifyPayment = () => {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const initializePayment = async (params: PaymentParams): Promise<PaymentResult> => {
+  const initializePayment = async ({
+    orderId,
+    amount,
+    customerEmail,
+    customerName,
+    description,
+    redirectUrl,
+  }: InitializePaymentParams) => {
     setLoading(true);
-    setError(null);
-
     try {
-      const redirectUrl = `${window.location.origin}/payment/callback`;
-
-      const { data, error: invokeError } = await supabase.functions.invoke("monnify-payment", {
-        body: {
-          action: "initialize",
-          orderId: params.orderId,
-          amount: params.amount,
-          customerEmail: params.customerEmail,
-          customerName: params.customerName,
-          description: params.description,
-          redirectUrl,
+      const token = await getAuthToken();
+      const response = await fetch(`${MONNIFY_BASE_URL}/api/v1/merchant/transactions/init-transaction`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          amount,
+          customerName,
+          customerEmail,
+          paymentDescription: description,
+          paymentReference: orderId,
+          currencyCode: "NGN",
+          contractCode: MONNIFY_CONTRACT_CODE,
+          redirectUrl,
+          paymentMethods: ["CARD", "ACCOUNT_TRANSFER", "USSD"],
+        }),
       });
 
-      if (invokeError) throw invokeError;
-
-      if (!data.success) {
-        throw new Error(data.error || "Payment initialization failed");
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to initialize Monnify payment");
       }
 
+      const data = await response.json();
       return {
         success: true,
-        checkoutUrl: data.checkoutUrl,
-        paymentReference: data.paymentReference,
+        checkoutUrl: data?.responseBody?.checkoutUrl as string,
+        paymentReference: data?.responseBody?.paymentReference as string,
       };
-    } catch (err: any) {
-      const errorMessage = err.message || "Payment initialization failed";
-      setError(errorMessage);
-      return { success: false, error: errorMessage };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || "Payment initialization failed",
+      };
     } finally {
       setLoading(false);
     }
   };
 
-  const verifyPayment = async (paymentReference: string, orderId: string): Promise<VerifyResult> => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const { data, error: invokeError } = await supabase.functions.invoke("monnify-payment", {
-        body: {
-          action: "verify",
-          paymentReference,
-          orderId,
+  const verifyPayment = async (paymentReference: string): Promise<VerifyPaymentResult> => {
+    const token = await getAuthToken();
+    const response = await fetch(
+      `${MONNIFY_BASE_URL}/api/v1/merchant/transactions/query?paymentReference=${encodeURIComponent(paymentReference)}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
-      });
+      }
+    );
 
-      if (invokeError) throw invokeError;
-
-      return {
-        success: data.success,
-        status: data.status,
-        amount: data.amount,
-      };
-    } catch (err: any) {
-      const errorMessage = err.message || "Payment verification failed";
-      setError(errorMessage);
-      return { success: false, status: "FAILED", error: errorMessage };
-    } finally {
-      setLoading(false);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || "Failed to verify Monnify payment");
     }
+
+    const data = await response.json();
+    return {
+      status: data?.responseBody?.paymentStatus,
+      amount: data?.responseBody?.amountPaid,
+      paymentReference: data?.responseBody?.paymentReference,
+    };
   };
 
   return {
+    loading,
     initializePayment,
     verifyPayment,
-    loading,
-    error,
   };
 };

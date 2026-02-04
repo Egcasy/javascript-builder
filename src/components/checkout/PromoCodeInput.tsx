@@ -2,8 +2,9 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tag, X, Check, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface PromoCodeInputProps {
   eventId?: string;
@@ -30,20 +31,17 @@ export const PromoCodeInput = ({
     setLoading(true);
     try {
       // Query promo codes - either for this specific event or global (null event_id)
-      let query = supabase
-        .from("promo_codes")
-        .select("*")
-        .eq("code", code.trim().toUpperCase())
-        .eq("is_active", true);
-
-      const { data: promoCodes, error } = await query;
-
-      if (error) throw error;
+      const promoSnapshot = await getDocs(
+        query(
+          collection(db, "promo_codes"),
+          where("code", "==", code.trim().toUpperCase()),
+          where("is_active", "==", true)
+        )
+      );
+      const promoCodes = promoSnapshot.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as any) }));
 
       // Find a matching promo code (event-specific takes priority)
-      const promoCode = promoCodes?.find(p => 
-        p.event_id === eventId || p.event_id === null
-      );
+      const promoCode = promoCodes?.find((promo) => promo.event_id === eventId || promo.event_id === null);
 
       if (!promoCode) {
         toast({

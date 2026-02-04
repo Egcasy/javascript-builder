@@ -13,21 +13,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Layout } from "@/components/layout/Layout";
 import { EventCard } from "@/components/events/EventCard";
-import { mockEvents, getEventsByCategory } from "@/data/mockEvents";
 import { cn } from "@/lib/utils";
-
-const categories = [
-  { id: "all", label: "All Events" },
-  { id: "friday-night", label: "Friday Night" },
-  { id: "saturday-vibes", label: "Saturday Vibes" },
-  { id: "sunday-groove", label: "Sunday Groove" },
-  { id: "beach-party", label: "Beach Parties" },
-  { id: "pool-party", label: "Pool Parties" },
-  { id: "festival", label: "Festivals" },
-  { id: "concert", label: "Concerts" },
-];
-
-const cities = ["Lagos", "Abuja", "Port Harcourt", "Ibadan", "Kano"];
+import { useEvents } from "@/hooks/useEvents";
+import { useQuery } from "@tanstack/react-query";
+import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 export default function Events() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -37,13 +27,29 @@ export default function Events() {
   const selectedCategory = searchParams.get("category") || "all";
   const selectedCity = searchParams.get("city") || "";
 
-  const filteredEvents = mockEvents.filter((event) => {
-    const matchesCategory = selectedCategory === "all" || event.category === selectedCategory;
-    const matchesCity = !selectedCity || event.venue.city === selectedCity;
-    const matchesSearch = !searchQuery || 
-      event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.venue.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesCity && matchesSearch;
+  const { data: categoryOptions = [] } = useQuery({
+    queryKey: ["event-categories"],
+    queryFn: async () => {
+      const snapshot = await getDocs(query(collection(db, "event_categories"), orderBy("order", "asc")));
+      return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as { label: string }) }));
+    },
+  });
+
+  const { data: allEvents = [] } = useEvents();
+
+  const cities = Array.from(
+    new Set(allEvents.map((event) => event.venue.city).filter(Boolean))
+  ).sort();
+
+  const categories = [
+    { id: "all", label: "All Events" },
+    ...categoryOptions.map((category) => ({ id: category.id, label: category.label })),
+  ];
+
+  const { data: filteredEvents = [], isLoading } = useEvents({
+    category: selectedCategory === "all" ? undefined : selectedCategory,
+    city: selectedCity || undefined,
+    search: searchQuery || undefined,
   });
 
   const handleCategoryChange = (categoryId: string) => {
@@ -248,7 +254,13 @@ export default function Events() {
         </div>
 
         {/* Events Grid */}
-        {filteredEvents.length > 0 ? (
+        {isLoading ? (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="h-80 bg-card rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : filteredEvents.length > 0 ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredEvents.map((event, index) => (
               <EventCard key={event.id} event={event} index={index} />

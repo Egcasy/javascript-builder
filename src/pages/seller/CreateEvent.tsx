@@ -22,8 +22,9 @@ import { Switch } from "@/components/ui/switch";
 import { Layout } from "@/components/layout/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { addDoc, collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface TicketTypeForm {
   name: string;
@@ -79,15 +80,11 @@ export default function CreateEvent() {
 
   // Fetch seller
   const { data: seller } = useQuery({
-    queryKey: ['seller', user?.id],
+    queryKey: ['seller', user?.uid],
     queryFn: async () => {
       if (!user) return null;
-      const { data } = await supabase
-        .from('sellers')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      return data;
+      const sellerSnap = await getDoc(doc(db, "sellers", user.uid));
+      return sellerSnap.exists() ? { id: sellerSnap.id, ...(sellerSnap.data() as { business_name?: string; logo_url?: string; tier?: string; verified?: boolean; }) } : null;
     },
     enabled: !!user
   });
@@ -96,8 +93,8 @@ export default function CreateEvent() {
   const { data: venues } = useQuery({
     queryKey: ['venues'],
     queryFn: async () => {
-      const { data } = await supabase.from('venues').select('*').order('name');
-      return data || [];
+      const venueSnapshot = await getDocs(query(collection(db, "venues"), orderBy("name")));
+      return venueSnapshot.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as { name: string; address?: string; city?: string; }) }));
     }
   });
 
@@ -140,70 +137,81 @@ export default function CreateEvent() {
     try {
       // Create venue if new
       let venueId = formData.venueId || null;
+      let venueData = {
+        name: "",
+        address: "",
+        city: "",
+      };
+
       if (!venueId && formData.newVenue.name) {
-        const { data: newVenue, error: venueError } = await supabase
-          .from('venues')
-          .insert({
-            name: formData.newVenue.name,
-            address: formData.newVenue.address,
-            city: formData.newVenue.city
-          })
-          .select()
-          .single();
-        
-        if (venueError) throw venueError;
-        venueId = newVenue.id;
+        const newVenueRef = await addDoc(collection(db, "venues"), {
+          name: formData.newVenue.name.trim(),
+          address: formData.newVenue.address.trim(),
+          city: formData.newVenue.city.trim(),
+          created_at: serverTimestamp(),
+        });
+        venueId = newVenueRef.id;
+        venueData = {
+          name: formData.newVenue.name.trim(),
+          address: formData.newVenue.address.trim(),
+          city: formData.newVenue.city.trim(),
+        };
+      } else if (venueId && venues) {
+        const existingVenue = venues.find((venue) => venue.id === venueId);
+        venueData = {
+          name: existingVenue?.name ?? "",
+          address: existingVenue?.address ?? "",
+          city: existingVenue?.city ?? "",
+        };
       }
 
-      // Calculate total tickets
-      const totalTickets = validTickets.reduce((sum, t) => sum + parseInt(t.quantity), 0);
-
-      // Create event
-      const { data: event, error: eventError } = await supabase
-        .from('events')
-        .insert({
-          seller_id: seller.id,
-          venue_id: venueId,
-          title: formData.title,
-          description: formData.description || null,
-          short_description: formData.shortDescription || null,
-          cover_image: formData.coverImage || null,
-          date: formData.date,
-          start_time: formData.startTime,
-          end_time: formData.endTime || null,
-          category: formData.category,
-          tags: formData.tags ? formData.tags.split(',').map(t => t.trim()) : null,
-          age_restriction: formData.ageRestriction ? parseInt(formData.ageRestriction) : null,
-          dress_code: formData.dressCode || null,
-          is_featured: formData.isFeatured,
-          is_hot: formData.isHot,
-          total_tickets: totalTickets,
-          status: 'active'
-        })
-        .select()
-        .single();
-
-      if (eventError) throw eventError;
-
-      // Create ticket types
-      const ticketTypesData = validTickets.map(t => ({
-        event_id: event.id,
-        name: t.name,
-        description: t.description || null,
-        price: parseFloat(t.price),
-        quantity: parseInt(t.quantity),
-        max_per_order: parseInt(t.maxPerOrder) || 10,
-        benefits: t.benefits ? t.benefits.split(',').map(b => b.trim()) : null
+      const totalTickets = validTickets.reduce((sum, t) => sum + parseInt(t.quantity, 10), 0);
+      const ticketTypesData = validTickets.map((ticket) => ({
+        id: crypto.randomUUID(),
+        name: ticket.name,
+        description: ticket.description || "",
+        price: parseFloat(ticket.price),
+        quantity: parseInt(ticket.quantity, 10),
+        sold: 0,
+        max_per_order: parseInt(ticket.maxPerOrder, 10) || 10,
+        benefits: ticket.benefits ? ticket.benefits.split(",").map((b) => b.trim()) : [],
       }));
 
-      const { error: ticketsError } = await supabase
-        .from('ticket_types')
-        .insert(ticketTypesData);
-
-      if (ticketsError) throw ticketsError;
+      await addDoc(collection(db, "events"), {
+        seller_id: seller.id,
+        organizer: {
+          id: seller.id,
+          name: seller.business_name || "Organizer",
+          logo: seller.logo_url || "",
+          verified: Boolean(seller.verified),
+          tier: seller.tier || "gold",
+        },
+        venue_id: venueId,
+        venue: venueData,
+        title: formData.title.trim(),
+        description: formData.description || "",
+        short_description: formData.shortDescription || "",
+        cover_image: formData.coverImage || "",
+        date: formData.date,
+        start_time: formData.startTime,
+        end_time: formData.endTime || "",
+        category: formData.category,
+        tags: formData.tags ? formData.tags.split(",").map((t) => t.trim()) : [],
+        age_restriction: formData.ageRestriction ? parseInt(formData.ageRestriction, 10) : null,
+        dress_code: formData.dressCode || "",
+        is_featured: formData.isFeatured,
+        is_hot: formData.isHot,
+        total_tickets: totalTickets,
+        sold_tickets: 0,
+        ticket_types: ticketTypesData,
+        ticket_type_ids: ticketTypesData.map((ticket) => ticket.id),
+        status: "active",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
 
       toast({ title: "Event created!", description: "Your event is now live" });
-      navigate('/seller/dashboard');
+      navigate("/seller/dashboard");
     } catch (error) {
       console.error('Error creating event:', error);
       toast({ title: "Error", description: "Failed to create event", variant: "destructive" });

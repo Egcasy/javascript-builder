@@ -7,13 +7,14 @@ import { Layout } from "@/components/layout/Layout";
 import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { useMonnifyPayment } from "@/hooks/useMonnifyPayment";
 import { PromoCodeInput } from "@/components/checkout/PromoCodeInput";
+import { addDoc, collection, doc, increment, updateDoc } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
+import { useMonnifyPayment } from "@/hooks/useMonnifyPayment";
 
 export default function Checkout() {
   const { items, totalPrice, clearCart } = useCart();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const { initializePayment, loading: paymentLoading } = useMonnifyPayment();
@@ -60,56 +61,55 @@ export default function Checkout() {
         const discountAmount = appliedPromo ? appliedPromo.amount : 0;
         const orderTotal = (orderSubtotal - discountAmount) * 1.05;
 
-        // Create order with pending status
-        const { data: order, error: orderError } = await supabase
-          .from('orders')
-          .insert({
-            user_id: user.id,
-            event_id: eventId,
-            status: 'pending',
-            total_amount: orderTotal,
-            promo_code_id: appliedPromo?.id || null,
-            discount_amount: discountAmount
-          })
-          .select()
-          .single();
+        const orderRef = await addDoc(collection(db, "orders"), {
+          user_id: user.uid,
+          event_id: eventId,
+          status: "pending",
+          total_amount: orderTotal,
+          promo_code_id: appliedPromo?.id || null,
+          discount_amount: discountAmount,
+          created_at: new Date().toISOString(),
+          event_title: eventItems[0]?.ticketType?.event?.title || "Event",
+          event_cover_image: eventItems[0]?.ticketType?.event?.cover_image || "",
+          event_date: eventItems[0]?.ticketType?.event?.date || "",
+        });
 
-        if (orderError) throw orderError;
-        if (!firstOrderId) firstOrderId = order.id;
+        if (!firstOrderId) firstOrderId = orderRef.id;
 
         // Create tickets
         for (const item of eventItems) {
           const ticketsToCreate = Array.from({ length: item.quantity }, () => ({
-            order_id: order.id,
+            order_id: orderRef.id,
             ticket_type_id: item.ticket_type_id,
-            user_id: user.id,
+            user_id: user.uid,
+            event_id: eventId,
             qr_code: generateQRCode(),
-            status: 'pending'
+            status: "pending",
+            created_at: new Date().toISOString(),
           }));
 
-          const { error: ticketsError } = await supabase.from('tickets').insert(ticketsToCreate);
-          if (ticketsError) throw ticketsError;
+          await Promise.all(
+            ticketsToCreate.map((ticket) => addDoc(collection(db, "tickets"), ticket))
+          );
         }
       }
 
       // Update promo code usage
       if (appliedPromo) {
-        await supabase
-          .from('promo_codes')
-          .update({ used_count: 1 })
-          .eq('id', appliedPromo.id);
+        await updateDoc(doc(db, "promo_codes", appliedPromo.id), {
+          used_count: increment(1),
+        });
       }
 
-      // Store order ID for callback
       localStorage.setItem("pendingOrderId", firstOrderId);
 
-      // Initialize Monnify payment
       const result = await initializePayment({
         orderId: firstOrderId,
         amount: total,
-        customerEmail: profile?.email || user.email || "",
-        customerName: profile?.full_name || "Customer",
-        description: `TixHub Tickets - ${items.length} item(s)`
+        customerEmail: user.email || "",
+        customerName: user.displayName || "Customer",
+        description: `TixHub Tickets - ${items.length} item(s)`,
+        redirectUrl: `${window.location.origin}/payment/callback`,
       });
 
       if (result.success && result.checkoutUrl) {

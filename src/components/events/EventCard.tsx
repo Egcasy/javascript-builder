@@ -14,8 +14,9 @@ interface EventCardProps {
 }
 
 export function EventCard({ event, index = 0, variant = "default" }: EventCardProps) {
-  const lowestPrice = Math.min(...event.ticketTypes.map(t => t.price));
-  const soldPercentage = (event.soldTickets / event.totalTickets) * 100;
+  const ticketPrices = event.ticketTypes.map((ticket) => ticket.price);
+  const lowestPrice = ticketPrices.length > 0 ? Math.min(...ticketPrices) : 0;
+  const soldPercentage = event.totalTickets > 0 ? (event.soldTickets / event.totalTickets) * 100 : 0;
   const isAlmostSoldOut = soldPercentage > 80;
 
   const formatDate = (dateStr: string) => {

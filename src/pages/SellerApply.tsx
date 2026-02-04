@@ -16,7 +16,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Layout } from "@/components/layout/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/firebase/client";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 
 export default function SellerApply() {
   const { user, isSeller } = useAuth();
@@ -53,32 +54,21 @@ export default function SellerApply() {
 
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('sellers')
-        .insert({
-          user_id: user.id,
-          business_name: formData.businessName.trim(),
-          business_email: formData.businessEmail.trim() || null,
-          description: formData.description.trim() || null
-        });
+      await setDoc(doc(db, "sellers", user.uid), {
+        user_id: user.uid,
+        business_name: formData.businessName.trim(),
+        business_email: formData.businessEmail.trim() || null,
+        description: formData.description.trim() || null,
+        tier: "bronze",
+        verified: false,
+        created_at: serverTimestamp(),
+      });
 
-      if (error) {
-        if (error.code === '23505') {
-          toast({
-            title: "Already a seller",
-            description: "You already have a seller account",
-            variant: "destructive"
-          });
-        } else {
-          throw error;
-        }
-      } else {
-        toast({
-          title: "Welcome aboard!",
-          description: "Your seller account has been created"
-        });
-        navigate('/seller/dashboard');
-      }
+      toast({
+        title: "Welcome aboard!",
+        description: "Your seller account has been created",
+      });
+      navigate('/seller/dashboard');
     } catch (error) {
       console.error('Error creating seller account:', error);
       toast({

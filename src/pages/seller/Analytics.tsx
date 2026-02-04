@@ -6,8 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Layout } from "@/components/layout/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart as RechartsPie, Pie, Cell } from "recharts";
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 const COLORS = ["hsl(var(--primary))", "hsl(var(--accent))", "#22c55e", "#eab308", "#ef4444"];
 
@@ -17,11 +18,11 @@ export default function SellerAnalytics() {
 
   // Fetch seller data
   const { data: seller } = useQuery({
-    queryKey: ["seller", user?.id],
+    queryKey: ["seller", user?.uid],
     queryFn: async () => {
       if (!user) return null;
-      const { data } = await supabase.from("sellers").select("*").eq("user_id", user.id).maybeSingle();
-      return data;
+      const sellerSnap = await getDoc(doc(db, "sellers", user.uid));
+      return sellerSnap.exists() ? { id: sellerSnap.id, ...(sellerSnap.data() as any) } : null;
     },
     enabled: !!user,
   });
@@ -32,20 +33,17 @@ export default function SellerAnalytics() {
     queryFn: async () => {
       if (!seller) return null;
 
-      // Get events
-      const { data: events } = await supabase
-        .from("events")
-        .select(`*, ticket_types(*)`)
-        .eq("seller_id", seller.id);
+      const eventsSnapshot = await getDocs(
+        query(collection(db, "events"), where("seller_id", "==", seller.id))
+      );
+      const events = eventsSnapshot.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as any) }));
 
       const eventIds = events?.map((e) => e.id) || [];
 
-      // Get orders for these events
-      const { data: orders } = await supabase
-        .from("orders")
-        .select("*")
-        .in("event_id", eventIds)
-        .eq("status", "completed");
+      const ordersSnapshot = await getDocs(
+        query(collection(db, "orders"), where("event_id", "in", eventIds), where("status", "==", "completed"))
+      );
+      const orders = ordersSnapshot.docs.map((docSnap) => docSnap.data());
 
       // Calculate stats
       const totalRevenue = orders?.reduce((sum, o) => sum + Number(o.total_amount), 0) || 0;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { User, Mail, Phone, Camera, Save, Ticket, Heart, Star, Calendar } from "lucide-react";
@@ -10,8 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Layout } from "@/components/layout/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -23,26 +24,33 @@ export default function Profile() {
     phone: profile?.phone || "",
   });
 
+  useEffect(() => {
+    setFormData({
+      full_name: profile?.full_name || "",
+      phone: profile?.phone || "",
+    });
+  }, [profile]);
+
   // Fetch user stats
   const { data: stats } = useQuery({
-    queryKey: ["user-stats", user?.id],
+    queryKey: ["user-stats", user?.uid],
     queryFn: async () => {
       if (!user) return null;
-      
-      const [ticketsRes, ordersRes, favoritesRes, reviewsRes] = await Promise.all([
-        supabase.from("tickets").select("id", { count: "exact" }).eq("user_id", user.id),
-        supabase.from("orders").select("total_amount").eq("user_id", user.id).eq("status", "completed"),
-        supabase.from("favorites").select("id", { count: "exact" }).eq("user_id", user.id),
-        supabase.from("event_reviews").select("id", { count: "exact" }).eq("user_id", user.id),
+
+      const [ticketsSnapshot, ordersSnapshot, favoritesSnapshot, reviewsSnapshot] = await Promise.all([
+        getDocs(query(collection(db, "tickets"), where("user_id", "==", user.uid))),
+        getDocs(query(collection(db, "orders"), where("user_id", "==", user.uid), where("status", "==", "completed"))),
+        getDocs(query(collection(db, "favorites"), where("user_id", "==", user.uid))),
+        getDocs(query(collection(db, "event_reviews"), where("user_id", "==", user.uid))),
       ]);
 
-      const totalSpent = ordersRes.data?.reduce((sum, o) => sum + Number(o.total_amount), 0) || 0;
+      const totalSpent = ordersSnapshot.docs.reduce((sum, docSnap) => sum + Number(docSnap.data().total_amount || 0), 0);
 
       return {
-        ticketsCount: ticketsRes.count || 0,
+        ticketsCount: ticketsSnapshot.size,
         totalSpent,
-        favoritesCount: favoritesRes.count || 0,
-        reviewsCount: reviewsRes.count || 0,
+        favoritesCount: favoritesSnapshot.size,
+        reviewsCount: reviewsSnapshot.size,
       };
     },
     enabled: !!user,
@@ -50,31 +58,38 @@ export default function Profile() {
 
   // Fetch order history
   const { data: orders } = useQuery({
-    queryKey: ["user-orders", user?.id],
+    queryKey: ["user-orders", user?.uid],
     queryFn: async () => {
       if (!user) return [];
-      const { data } = await supabase
-        .from("orders")
-        .select(`*, events(title, cover_image, date)`)
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(10);
-      return data || [];
+      const ordersSnapshot = await getDocs(
+        query(collection(db, "orders"), where("user_id", "==", user.uid))
+      );
+      return ordersSnapshot.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as any) }));
     },
     enabled: !!user,
   });
 
   // Fetch favorites
   const { data: favorites } = useQuery({
-    queryKey: ["user-favorites", user?.id],
+    queryKey: ["user-favorites", user?.uid],
     queryFn: async () => {
       if (!user) return [];
-      const { data } = await supabase
-        .from("favorites")
-        .select(`*, events(id, title, cover_image, date, venue_id, venues(name, city))`)
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-      return data || [];
+      const favoritesSnapshot = await getDocs(
+        query(collection(db, "favorites"), where("user_id", "==", user.uid))
+      );
+      const favoritesData = await Promise.all(
+        favoritesSnapshot.docs.map(async (favoriteDoc) => {
+          const favorite = favoriteDoc.data() as { event_id: string; created_at?: string };
+          const eventSnap = await getDoc(doc(db, "events", favorite.event_id));
+          return {
+            id: favoriteDoc.id,
+            event_id: favorite.event_id,
+            created_at: favorite.created_at,
+            event: eventSnap.exists() ? { id: eventSnap.id, ...(eventSnap.data() as any) } : null,
+          };
+        })
+      );
+      return favoritesData;
     },
     enabled: !!user,
   });
@@ -89,15 +104,14 @@ export default function Profile() {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          full_name: formData.full_name,
-          phone: formData.phone,
-        })
-        .eq("user_id", user.id);
-
-      if (error) throw error;
+      await setDoc(
+        doc(db, "profiles", user.uid),
+        {
+        full_name: formData.full_name,
+        phone: formData.phone,
+        },
+        { merge: true }
+      );
 
       toast({ title: "Profile updated successfully!" });
     } catch (error: any) {
@@ -262,15 +276,21 @@ export default function Profile() {
                     <div className="space-y-4">
                       {orders.map((order: any) => (
                         <div key={order.id} className="flex items-center gap-4 p-4 rounded-lg bg-muted/50 border border-border">
-                          <img
-                            src={order.events?.cover_image || "/placeholder.svg"}
-                            alt={order.events?.title}
-                            className="h-16 w-16 rounded-lg object-cover"
-                          />
+                          {order.event_cover_image ? (
+                            <img
+                              src={order.event_cover_image}
+                              alt={order.event_title}
+                              className="h-16 w-16 rounded-lg object-cover"
+                            />
+                          ) : (
+                            <div className="h-16 w-16 rounded-lg bg-background flex items-center justify-center">
+                              <Ticket className="h-6 w-6 text-muted-foreground" />
+                            </div>
+                          )}
                           <div className="flex-1">
-                            <p className="font-medium">{order.events?.title}</p>
+                            <p className="font-medium">{order.event_title}</p>
                             <p className="text-sm text-muted-foreground">
-                              {new Date(order.events?.date).toLocaleDateString()}
+                              {order.event_date ? new Date(order.event_date).toLocaleDateString() : "Date TBA"}
                             </p>
                           </div>
                           <div className="text-right">
@@ -303,18 +323,24 @@ export default function Profile() {
                       {favorites.map((fav: any) => (
                         <div
                           key={fav.id}
-                          onClick={() => navigate(`/events/${fav.events?.id}`)}
+                          onClick={() => fav.event?.id && navigate(`/events/${fav.event?.id}`)}
                           className="flex items-center gap-4 p-4 rounded-lg bg-muted/50 border border-border cursor-pointer hover:border-primary/50 transition-colors"
                         >
-                          <img
-                            src={fav.events?.cover_image || "/placeholder.svg"}
-                            alt={fav.events?.title}
-                            className="h-16 w-16 rounded-lg object-cover"
-                          />
+                          {fav.event?.cover_image ? (
+                            <img
+                              src={fav.event?.cover_image}
+                              alt={fav.event?.title}
+                              className="h-16 w-16 rounded-lg object-cover"
+                            />
+                          ) : (
+                            <div className="h-16 w-16 rounded-lg bg-background flex items-center justify-center">
+                              <Calendar className="h-6 w-6 text-muted-foreground" />
+                            </div>
+                          )}
                           <div>
-                            <p className="font-medium">{fav.events?.title}</p>
+                            <p className="font-medium">{fav.event?.title || "Event"}</p>
                             <p className="text-sm text-muted-foreground">
-                              {fav.events?.venues?.name}, {fav.events?.venues?.city}
+                              {fav.event?.venue?.name}, {fav.event?.venue?.city}
                             </p>
                           </div>
                         </div>

@@ -19,7 +19,6 @@ import { Badge } from "@/components/ui/badge";
 import { Layout } from "@/components/layout/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import {
   DropdownMenu,
@@ -27,6 +26,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 export default function SellerDashboard() {
   const { user, isSeller } = useAuth();
@@ -34,15 +35,11 @@ export default function SellerDashboard() {
 
   // Fetch seller profile
   const { data: seller } = useQuery({
-    queryKey: ['seller', user?.id],
+    queryKey: ['seller', user?.uid],
     queryFn: async () => {
       if (!user) return null;
-      const { data } = await supabase
-        .from('sellers')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      return data;
+      const sellerSnap = await getDoc(doc(db, "sellers", user.uid));
+      return sellerSnap.exists() ? { id: sellerSnap.id, ...(sellerSnap.data() as { business_name?: string; }) } : null;
     },
     enabled: !!user
   });
@@ -52,16 +49,10 @@ export default function SellerDashboard() {
     queryKey: ['seller-events', seller?.id],
     queryFn: async () => {
       if (!seller) return [];
-      const { data } = await supabase
-        .from('events')
-        .select(`
-          *,
-          venue:venues(*),
-          ticket_types(*)
-        `)
-        .eq('seller_id', seller.id)
-        .order('date', { ascending: true });
-      return data || [];
+      const eventsSnapshot = await getDocs(
+        query(collection(db, "events"), where("seller_id", "==", seller.id))
+      );
+      return eventsSnapshot.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as any) }));
     },
     enabled: !!seller
   });
@@ -75,21 +66,18 @@ export default function SellerDashboard() {
       const eventIds = events.map(e => e.id);
       if (eventIds.length === 0) return { totalSales: 0, totalRevenue: 0, totalTickets: 0 };
       
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('total_amount')
-        .in('event_id', eventIds)
-        .eq('status', 'completed');
+      const ordersSnapshot = await getDocs(
+        query(collection(db, "orders"), where("event_id", "in", eventIds), where("status", "==", "completed"))
+      );
 
-      const { count: ticketCount } = await supabase
-        .from('tickets')
-        .select('*', { count: 'exact', head: true })
-        .in('order_id', (await supabase.from('orders').select('id').in('event_id', eventIds)).data?.map(o => o.id) || []);
+      const ticketsSnapshot = await getDocs(
+        query(collection(db, "tickets"), where("event_id", "in", eventIds))
+      );
 
       return {
-        totalSales: orders?.length || 0,
-        totalRevenue: orders?.reduce((sum, o) => sum + Number(o.total_amount), 0) || 0,
-        totalTickets: ticketCount || 0
+        totalSales: ordersSnapshot.size,
+        totalRevenue: ordersSnapshot.docs.reduce((sum, docSnap) => sum + Number(docSnap.data().total_amount || 0), 0),
+        totalTickets: ticketsSnapshot.size,
       };
     },
     enabled: !!seller && !!events
@@ -214,7 +202,7 @@ export default function SellerDashboard() {
               </div>
             ) : (
               <div className="divide-y divide-border">
-                {events?.slice(0, 5).map((event) => (
+                {events?.slice(0, 5).map((event: any) => (
                   <div key={event.id} className="p-4 flex items-center gap-4 hover:bg-muted/30 transition-colors">
                     {/* Event Image */}
                     <div className="w-16 h-16 rounded-lg bg-muted flex-shrink-0 overflow-hidden">

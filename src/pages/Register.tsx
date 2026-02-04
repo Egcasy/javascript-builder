@@ -14,7 +14,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { auth, db, googleProvider } from "@/integrations/firebase/client";
+import { createUserWithEmailAndPassword, onAuthStateChanged, signInWithPopup, updateProfile } from "firebase/auth";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -31,19 +33,13 @@ export default function Register() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
         navigate("/");
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        navigate("/");
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    return () => unsubscribe();
   }, [navigate]);
 
   const updateField = (field: string, value: string) => {
@@ -64,44 +60,51 @@ export default function Register() {
     }
 
     setIsLoading(true);
-    
-    const { error } = await supabase.auth.signUp({
-      email: formData.email,
-      password: formData.password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-        data: {
-          full_name: formData.name,
-          phone: formData.phone,
-        },
-      },
-    });
 
-    if (error) {
-      if (error.message.includes("already registered")) {
+    try {
+      const credential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+      if (formData.name) {
+        await updateProfile(credential.user, { displayName: formData.name });
+      }
+      await setDoc(doc(db, "profiles", credential.user.uid), {
+        email: formData.email,
+        full_name: formData.name,
+        phone: formData.phone || null,
+        avatar_url: null,
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      });
+      toast.success("Account created successfully!");
+    } catch (error: any) {
+      if (error.message?.includes("email-already")) {
         toast.error("This email is already registered. Please sign in instead.");
       } else {
         toast.error(error.message);
       }
-    } else {
-      toast.success("Account created successfully!");
     }
     setIsLoading(false);
   };
 
   const handleGoogleSignup = async () => {
     setIsGoogleLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/`,
-      },
-    });
-
-    if (error) {
+    try {
+      const credential = await signInWithPopup(auth, googleProvider);
+      await setDoc(
+        doc(db, "profiles", credential.user.uid),
+        {
+          email: credential.user.email,
+          full_name: credential.user.displayName || "",
+          phone: credential.user.phoneNumber || null,
+          avatar_url: credential.user.photoURL || null,
+          updated_at: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } catch (error: any) {
       toast.error(error.message);
       setIsGoogleLoading(false);
     }
+    setIsGoogleLoading(false);
   };
 
   const benefits = [

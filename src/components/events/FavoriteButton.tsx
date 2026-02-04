@@ -2,9 +2,10 @@ import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { collection, deleteDoc, doc, getDocs, query, setDoc, where } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface FavoriteButtonProps {
   eventId: string;
@@ -18,16 +19,13 @@ export function FavoriteButton({ eventId, className, variant = "icon" }: Favorit
   const queryClient = useQueryClient();
 
   const { data: isFavorited } = useQuery({
-    queryKey: ["favorite", eventId, user?.id],
+    queryKey: ["favorite", eventId, user?.uid],
     queryFn: async () => {
       if (!user) return false;
-      const { data } = await supabase
-        .from("favorites")
-        .select("id")
-        .eq("event_id", eventId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      return !!data;
+      const favoritesSnapshot = await getDocs(
+        query(collection(db, "favorites"), where("event_id", "==", eventId), where("user_id", "==", user.uid))
+      );
+      return !favoritesSnapshot.empty;
     },
     enabled: !!user,
   });
@@ -37,22 +35,18 @@ export function FavoriteButton({ eventId, className, variant = "icon" }: Favorit
       if (!user) throw new Error("Please login to save favorites");
 
       if (isFavorited) {
-        const { error } = await supabase
-          .from("favorites")
-          .delete()
-          .eq("event_id", eventId)
-          .eq("user_id", user.id);
-        if (error) throw error;
+        await deleteDoc(doc(db, "favorites", `${user.uid}_${eventId}`));
       } else {
-        const { error } = await supabase
-          .from("favorites")
-          .insert({ event_id: eventId, user_id: user.id });
-        if (error) throw error;
+        await setDoc(doc(db, "favorites", `${user.uid}_${eventId}`), {
+          event_id: eventId,
+          user_id: user.uid,
+          created_at: new Date().toISOString(),
+        });
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["favorite", eventId, user?.id] });
-      queryClient.invalidateQueries({ queryKey: ["user-favorites", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["favorite", eventId, user?.uid] });
+      queryClient.invalidateQueries({ queryKey: ["user-favorites", user?.uid] });
       toast({
         title: isFavorited ? "Removed from favorites" : "Added to favorites",
       });

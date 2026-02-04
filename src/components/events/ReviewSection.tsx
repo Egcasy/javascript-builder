@@ -5,15 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { addDoc, collection, doc, getDoc, getDocs, orderBy, query, where } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface ReviewSectionProps {
   eventId: string;
 }
 
 export function ReviewSection({ eventId }: ReviewSectionProps) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [rating, setRating] = useState(0);
@@ -24,27 +25,42 @@ export function ReviewSection({ eventId }: ReviewSectionProps) {
   const { data: reviews } = useQuery({
     queryKey: ["event-reviews", eventId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("event_reviews")
-        .select(`*, profiles:user_id(full_name, avatar_url)`)
-        .eq("event_id", eventId)
-        .order("created_at", { ascending: false });
-      return data || [];
+      const reviewSnapshot = await getDocs(
+        query(collection(db, "event_reviews"), where("event_id", "==", eventId), orderBy("created_at", "desc"))
+      );
+
+      const reviewsWithProfiles = await Promise.all(
+        reviewSnapshot.docs.map(async (reviewDoc) => {
+          const data = reviewDoc.data() as {
+            user_id: string;
+            rating: number;
+            comment?: string;
+            created_at?: string;
+          };
+          const profileSnap = await getDoc(doc(db, "profiles", data.user_id));
+          const profile = profileSnap.exists() ? (profileSnap.data() as { full_name?: string }) : null;
+          return {
+            id: reviewDoc.id,
+            ...data,
+            profiles: profile,
+          };
+        })
+      );
+
+      return reviewsWithProfiles;
     },
   });
 
   // Check if user already reviewed
   const { data: userReview } = useQuery({
-    queryKey: ["user-review", eventId, user?.id],
+    queryKey: ["user-review", eventId, user?.uid],
     queryFn: async () => {
       if (!user) return null;
-      const { data } = await supabase
-        .from("event_reviews")
-        .select("*")
-        .eq("event_id", eventId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      return data;
+      const reviewSnapshot = await getDocs(
+        query(collection(db, "event_reviews"), where("event_id", "==", eventId), where("user_id", "==", user.uid))
+      );
+      const reviewDoc = reviewSnapshot.docs[0];
+      return reviewDoc ? { id: reviewDoc.id, ...(reviewDoc.data() as any) } : null;
     },
     enabled: !!user,
   });
@@ -54,21 +70,20 @@ export function ReviewSection({ eventId }: ReviewSectionProps) {
       if (!user) throw new Error("Please login to review");
       if (rating === 0) throw new Error("Please select a rating");
 
-      const { error } = await supabase.from("event_reviews").insert({
+      await addDoc(collection(db, "event_reviews"), {
         event_id: eventId,
-        user_id: user.id,
+        user_id: user.uid,
         rating,
         comment: comment.trim() || null,
+        created_at: new Date().toISOString(),
       });
-
-      if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: "Review submitted!" });
       setRating(0);
       setComment("");
       queryClient.invalidateQueries({ queryKey: ["event-reviews", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["user-review", eventId, user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["user-review", eventId, user?.uid] });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });

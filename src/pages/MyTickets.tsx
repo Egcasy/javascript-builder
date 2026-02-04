@@ -15,10 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import { Layout } from "@/components/layout/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { QRCodeSVG } from "qrcode.react";
+import { collection, doc, getDoc, getDocs, orderBy, query, where } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface TicketWithDetails {
   id: string;
@@ -48,58 +49,52 @@ export default function MyTickets() {
   const [selectedTicket, setSelectedTicket] = useState<TicketWithDetails | null>(null);
 
   const { data: tickets, isLoading } = useQuery({
-    queryKey: ['my-tickets', user?.id],
+    queryKey: ['my-tickets', user?.uid],
     queryFn: async () => {
       if (!user) return [];
-      
-      const { data, error } = await supabase
-        .from('tickets')
-        .select(`
-          id,
-          qr_code,
-          status,
-          checked_in_at,
-          created_at,
-          ticket_types (
-            name,
-            price,
-            events (
-              id,
-              title,
-              cover_image,
-              date,
-              start_time,
-              venues (
-                name,
-                city
-              )
-            )
-          )
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      
-      return (data || []).map((ticket: any) => ({
-        id: ticket.id,
-        qr_code: ticket.qr_code,
-        status: ticket.status,
-        checked_in_at: ticket.checked_in_at,
-        created_at: ticket.created_at,
-        ticket_type: {
-          name: ticket.ticket_types?.name,
-          price: ticket.ticket_types?.price,
-          event: {
-            id: ticket.ticket_types?.events?.id,
-            title: ticket.ticket_types?.events?.title,
-            cover_image: ticket.ticket_types?.events?.cover_image,
-            date: ticket.ticket_types?.events?.date,
-            start_time: ticket.ticket_types?.events?.start_time,
-            venue: ticket.ticket_types?.events?.venues
-          }
-        }
-      })) as TicketWithDetails[];
+      const ticketSnapshot = await getDocs(
+        query(collection(db, "tickets"), where("user_id", "==", user.uid), orderBy("created_at", "desc"))
+      );
+
+      const ticketsData = await Promise.all(
+        ticketSnapshot.docs.map(async (ticketDoc) => {
+          const ticketData = ticketDoc.data() as {
+            qr_code: string;
+            status: string;
+            checked_in_at: string | null;
+            created_at: string;
+            ticket_type_id: string;
+            event_id: string;
+          };
+
+          const eventSnap = await getDoc(doc(db, "events", ticketData.event_id));
+          const event = eventSnap.exists() ? (eventSnap.data() as any) : null;
+          const ticketType = event?.ticket_types?.find((type: any) => type.id === ticketData.ticket_type_id);
+
+          return {
+            id: ticketDoc.id,
+            qr_code: ticketData.qr_code,
+            status: ticketData.status,
+            checked_in_at: ticketData.checked_in_at,
+            created_at: ticketData.created_at,
+            ticket_type: {
+              name: ticketType?.name || "Ticket",
+              price: ticketType?.price || 0,
+              event: {
+                id: ticketData.event_id,
+                title: event?.title || "Event",
+                cover_image: event?.cover_image || "",
+                date: event?.date || "",
+                start_time: event?.start_time || "",
+                venue: event?.venue || null,
+              },
+            },
+          } as TicketWithDetails;
+        })
+      );
+
+      return ticketsData;
     },
     enabled: !!user
   });

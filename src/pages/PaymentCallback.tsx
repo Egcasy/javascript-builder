@@ -4,42 +4,66 @@ import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, XCircle, Loader2 } from "lucide-react";
-import { useMonnifyPayment } from "@/hooks/useMonnifyPayment";
-import { useCart } from "@/contexts/CartContext";
 import { motion } from "framer-motion";
+import { collection, doc, getDoc, getDocs, query, updateDoc, where } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
+import { useMonnifyPayment } from "@/hooks/useMonnifyPayment";
 
 export default function PaymentCallback() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { verifyPayment, loading } = useMonnifyPayment();
-  const { clearCart } = useCart();
 
-  const [status, setStatus] = useState<"loading" | "success" | "failed">("loading");
+  const { verifyPayment } = useMonnifyPayment();
+  const [status, setStatus] = useState<"loading" | "success" | "failed" | "pending">("loading");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const paymentReference = searchParams.get("paymentReference");
     const orderId = localStorage.getItem("pendingOrderId");
+    const paymentReference = searchParams.get("paymentReference");
 
-    if (paymentReference && orderId) {
-      handleVerification(paymentReference, orderId);
+    if (orderId && paymentReference) {
+      handleVerification(orderId, paymentReference);
     } else {
       setStatus("failed");
-      setMessage("Payment information not found");
+      setMessage("Order information not found");
     }
   }, [searchParams]);
 
-  const handleVerification = async (paymentReference: string, orderId: string) => {
-    const result = await verifyPayment(paymentReference, orderId);
+  const handleVerification = async (orderId: string, paymentReference: string) => {
+    try {
+      setStatus("loading");
+      const result = await verifyPayment(paymentReference);
+      if (result.status === "PAID") {
+        await updateDoc(doc(db, "orders", orderId), {
+          status: "completed",
+          payment_reference: paymentReference,
+          payment_status: result.status,
+        });
 
-    if (result.success && result.status === "PAID") {
-      setStatus("success");
-      setMessage(`Payment of ₦${result.amount?.toLocaleString()} received`);
-      clearCart();
-      localStorage.removeItem("pendingOrderId");
-    } else {
+        const ticketsSnapshot = await getDocs(
+          query(collection(db, "tickets"), where("order_id", "==", orderId))
+        );
+        await Promise.all(
+          ticketsSnapshot.docs.map((ticketDoc) =>
+            updateDoc(ticketDoc.ref, { status: "valid" })
+          )
+        );
+
+        const orderSnap = await getDoc(doc(db, "orders", orderId));
+        const order = orderSnap.data() as { total_amount?: number };
+        setStatus("success");
+        setMessage(`Payment of ₦${Number(order?.total_amount || 0).toLocaleString()} received`);
+        localStorage.removeItem("pendingOrderId");
+      } else if (result.status === "PENDING") {
+        setStatus("pending");
+        setMessage("Payment pending confirmation");
+      } else {
+        setStatus("failed");
+        setMessage("Payment failed or cancelled");
+      }
+    } catch (error) {
       setStatus("failed");
-      setMessage(result.error || `Payment ${result.status.toLowerCase()}`);
+      setMessage("Payment verification failed");
     }
   };
 
@@ -100,6 +124,22 @@ export default function PaymentCallback() {
                     </Button>
                     <Button variant="outline" className="w-full" onClick={() => navigate("/cart")}>
                       Back to Cart
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {status === "pending" && (
+                <>
+                  <Loader2 className="h-16 w-16 animate-spin text-primary mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold mb-2">Payment Pending</h2>
+                  <p className="text-muted-foreground mb-6">{message}</p>
+                  <div className="space-y-2">
+                    <Button className="w-full" onClick={() => navigate("/my-tickets")}>
+                      View My Tickets
+                    </Button>
+                    <Button variant="outline" className="w-full" onClick={() => navigate("/events")}>
+                      Browse More Events
                     </Button>
                   </div>
                 </>
